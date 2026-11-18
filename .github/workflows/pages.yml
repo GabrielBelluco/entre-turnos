@@ -1,0 +1,48 @@
+name: Publicar atlas
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: entre-turnos-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Preparar site e importar o código na primeira publicação
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+            npm run data:check
+            npm run build
+          else
+            release="$RUNNER_TEMP/entre-turnos-release"
+            unzip -q Entre-Turnos.zip -d "$release"
+            test -f "$release/entre-turnos/dist/index.html"
+            rsync -a --exclude=.github "$release/entre-turnos/" ./
+            git add .
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Importa código, dados tratados e projeto Power BI'
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
